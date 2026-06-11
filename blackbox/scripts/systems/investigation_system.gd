@@ -28,6 +28,52 @@ const HYPOTHESIS_TO_TECH: Dictionary = {
 	"ENGINEERING_DEFICIENCY": [],
 }
 
+# Crew voice log dialogue per incident — hints at what's happening, never names it
+const CREW_DIALOGUE: Dictionary = {
+	"solar_storm": [
+		{"from": "CDR",    "text": "Houston, panel readings are off. Nothing alarming yet but something's different out here."},
+		{"from": "CAPCOM", "text": "Copy CDR. We're tracking elevated solar activity in your region. Keep monitoring."},
+		{"from": "MS1",    "text": "Commander, secondary array just dropped. Battery's compensating but it's working overtime."},
+		{"from": "CDR",    "text": "Power bus is fluctuating. Not losing it but the variance is outside anything I've seen."},
+		{"from": "CAPCOM", "text": "We see it. Running numbers now. Do not execute any burns until we clear this."},
+	],
+	"micrometeorite": [
+		{"from": "CDR",    "text": "Houston we heard something. A sharp sound, like someone knocked on the hull."},
+		{"from": "CAPCOM", "text": "Say again? Are you declaring an emergency?"},
+		{"from": "CDR",    "text": "Negative. No alarms. But nav is showing a slight drift. Correcting now."},
+		{"from": "PLT",    "text": "Thermal sensors on sector four are reading high. Wasn't there a minute ago."},
+		{"from": "CDR",    "text": "Yeah I see it. Trying to isolate the source. Pressure's holding for now."},
+	],
+	"software_glitch": [
+		{"from": "MS1",    "text": "Flight computer just rebooted itself. Wasn't scheduled."},
+		{"from": "CAPCOM", "text": "Copy that. Did it come back clean?"},
+		{"from": "MS1",    "text": "Looks like it but attitude control isn't responding normally. Not taking commands."},
+		{"from": "CDR",    "text": "Third time this hour. Running through the reset procedure again."},
+		{"from": "CAPCOM", "text": "Stand by. We're pushing a patch from down here."},
+	],
+	"comms_noise": [
+		{"from": "CDR",    "text": "Houston, are you receiving? Signal seems degraded on our end."},
+		{"from": "CAPCOM", "text": "You're breaking up. Say again?"},
+		{"from": "CDR",    "text": "Switching to backup frequency. Something's wrong with the link."},
+		{"from": "CAPCOM", "text": "Backup showing the same. We're losing you. Stand by."},
+		{"from": "CDR",    "text": "Copy. We're still here. Just... can't reach you clearly."},
+	],
+	"thruster_anomaly": [
+		{"from": "CDR",    "text": "Houston, we've had an unexpected burn. About 1.4 meters per second. Unplanned."},
+		{"from": "CAPCOM", "text": "Copy, we're seeing the trajectory deviation on our end."},
+		{"from": "PLT",    "text": "Thrusters are cycling on their own. I haven't touched the controls."},
+		{"from": "CDR",    "text": "Fuel consumption is up. If this keeps going we're going to have a real problem."},
+		{"from": "CAPCOM", "text": "Understood. Running failure scenarios now. Do not attempt manual override yet."},
+	],
+	"component_wear": [
+		{"from": "CDR",    "text": "Houston, systems are nominal but something feels off. Hard to put my finger on it."},
+		{"from": "CAPCOM", "text": "Nothing alarming from down here. Can you be more specific?"},
+		{"from": "PLT",    "text": "Performance is just... slightly below where it should be. Across the board."},
+		{"from": "CDR",    "text": "It's like the vehicle is tired. Nothing critical. Just worn."},
+		{"from": "CAPCOM", "text": "Copy. Flag it for post-mission review. Continue nominal ops."},
+	],
+}
+
 # Symptom strings per incident — describe EFFECTS, not causes
 const INCIDENT_SYMPTOMS: Dictionary = {
 	"solar_storm": [
@@ -189,29 +235,26 @@ func _build_investigation(mission: Dictionary) -> Dictionary:
 func _generate_comms(mission: Dictionary, incidents: Array) -> Array:
 	var comms: Array = []
 	comms.append({
-		"from": "FLIGHT",
-		"text": mission["name"] + " — separation confirmed. Trajectory nominal.",
+		"from": "CAPCOM",
+		"text": "Separation confirmed. Trajectory nominal. Good luck out there.",
 	})
+	comms.append({
+		"from": "CDR",
+		"text": "Copy Houston. All systems nominal. " + mission["name"] + " is go.",
+	})
+
+	var root: String = _determine_likely_cause(incidents)
+	var dialogue: Array = CREW_DIALOGUE.get(root, CREW_DIALOGUE["component_wear"])
+	for line: Dictionary in dialogue:
+		comms.append(line)
+
 	comms.append({
 		"from": "CAPCOM",
-		"text": "Roger. All channels clean. Power nominal. Proceeding on nominal timeline.",
-	})
-	for inc: Dictionary in incidents:
-		comms.append({
-			"from": "TELEMETRY",
-			"text": "[AUTO] Anomalous reading on " + mission["name"] + ". Diagnostic mode activated.",
-		})
-		comms.append({
-			"from": "FLIGHT",
-			"text": "Copy anomaly. Team evaluating. Standing by for recovery.",
-		})
-	comms.append({
-		"from": "TELEMETRY",
-		"text": "[AUTO] Signal lost. No carrier detected on primary or backup. Contact lost.",
+		"text": "[AUTO] Signal lost. No carrier on primary or backup.",
 	})
 	comms.append({
 		"from": "FLIGHT DIRECTOR",
-		"text": "We have lost the vehicle. " + mission["name"] + " is declared lost. Begin contingency.",
+		"text": mission["name"] + " is declared lost. Begin contingency procedures.",
 	})
 	return comms
 

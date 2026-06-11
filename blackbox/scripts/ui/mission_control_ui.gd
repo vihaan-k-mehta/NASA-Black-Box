@@ -53,6 +53,10 @@ var _inv_active_file:  Dictionary = {}  # mission_id -> currently displayed file
 # Objectives panel
 var _objectives_vbox: VBoxContainer
 
+# Launch configuration state
+var _launch_config_open: Dictionary = {}   # def_id -> bool
+var _launch_selections:  Dictionary = {}   # def_id -> {power, comms, nav, testing}
+
 # Incident popup
 var _popup:          Control
 var _popup_label:    Label
@@ -582,13 +586,18 @@ func _rebuild_available() -> void:
 	for def_id in GameState.unlocked_missions:
 		if not MissionSystem.DEFS.has(def_id):
 			continue
-		var def: Dictionary  = MissionSystem.DEFS[def_id]
-		var affordable: bool = GameState.funding >= def["cost"]
-		var is_active: bool  = MissionSystem.has_active_of_type(def_id)
+		var def: Dictionary      = MissionSystem.DEFS[def_id]
+		var affordable: bool     = GameState.funding >= def["cost"]
+		var is_active: bool      = MissionSystem.has_active_of_type(def_id)
+		var is_config_open: bool = _launch_config_open.get(def_id, false)
+
+		var wrapper := VBoxContainer.new()
+		wrapper.add_theme_constant_override("separation", 0)
+		_available_vbox.add_child(wrapper)
 
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		_available_vbox.add_child(row)
+		wrapper.add_child(row)
 
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -612,14 +621,98 @@ func _rebuild_available() -> void:
 			var lb := _btn("LAUNCH", 12)
 			lb.custom_minimum_size = Vector2(100, 34)
 			lb.disabled             = not affordable
-			if affordable:
+			if is_config_open:
+				lb.add_theme_color_override("font_color", C_AMBER)
+				lb.add_theme_stylebox_override("normal", _pstyle(C_PANEL2, C_ACCENT))
+			elif affordable:
 				lb.add_theme_color_override("font_color", C_GREEN)
-			lb.pressed.connect(_on_launch.bind(def_id))
+			lb.pressed.connect(_on_launch_configure.bind(def_id))
 			row.add_child(lb)
+
+		if is_config_open and not is_active:
+			wrapper.add_child(_pad(0, 4, 0, 0, _build_launch_config(def_id, def)))
+
 		shown += 1
 
 	if shown == 0:
 		_available_vbox.add_child(_lbl("No missions available.", 12, C_DIM))
+
+func _build_launch_config(def_id: String, def: Dictionary) -> Control:
+	var config := _get_launch_config(def_id)
+	var extra_cost: float = MissionSystem.config_extra_cost(config)
+	var total_cost: float = def["cost"] + extra_cost
+	var affordable: bool  = GameState.funding >= total_cost
+
+	var outer := PanelContainer.new()
+	outer.add_theme_stylebox_override("panel", _pstyle(Color(0.08, 0.10, 0.11), C_BORDER2, 0, 1, 1, 1))
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	outer.add_child(_pad(12, 10, 12, 10, vbox))
+
+	var cats: Array = [
+		["power",   "POWER SYSTEM"],
+		["comms",   "COMMUNICATIONS"],
+		["nav",     "NAVIGATION"],
+		["testing", "TESTING PROTOCOL"],
+	]
+
+	for cat_pair: Array in cats:
+		var cat_id: String      = cat_pair[0]
+		var cat_label: String   = cat_pair[1]
+		var options: Dictionary = MissionSystem.CONFIG_OPTIONS.get(cat_id, {})
+		var selected: String    = config.get(cat_id, "standard")
+
+		var cat_row := HBoxContainer.new()
+		cat_row.add_theme_constant_override("separation", 8)
+		vbox.add_child(cat_row)
+
+		var cat_lbl := _lbl(cat_label, 10, C_DIM)
+		cat_lbl.custom_minimum_size = Vector2(140, 0)
+		cat_row.add_child(cat_lbl)
+
+		for opt_id: String in options:
+			var opt: Dictionary   = options[opt_id]
+			var is_sel: bool      = (selected == opt_id)
+			var extra: float      = opt.get("extra_cost", 0.0)
+			var cost_str: String  = "BASE" if extra == 0.0 else "+%s" % _fmt_funds(extra)
+			var btn := _btn("%s   %s" % [opt["label"].to_upper(), cost_str], 10)
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			if is_sel:
+				btn.add_theme_color_override("font_color", C_GREEN)
+				btn.add_theme_stylebox_override("normal", _pstyle(Color(0.06, 0.14, 0.08), C_ACCENT))
+			else:
+				btn.add_theme_color_override("font_color", C_DIM)
+			btn.pressed.connect(_on_config_select.bind(def_id, cat_id, opt_id))
+			cat_row.add_child(btn)
+
+	vbox.add_child(_divider_h())
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 8)
+	vbox.add_child(footer)
+
+	var total_lbl := _lbl("TOTAL  " + _fmt_funds(total_cost), 11, C_GREEN if affordable else C_RED)
+	total_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(total_lbl)
+
+	var cancel_btn := _btn("CANCEL", 11)
+	cancel_btn.pressed.connect(_on_launch_configure.bind(def_id))
+	footer.add_child(cancel_btn)
+
+	var confirm_btn := _btn("CONFIRM LAUNCH", 11)
+	confirm_btn.disabled = not affordable
+	if affordable:
+		confirm_btn.add_theme_color_override("font_color", C_GREEN)
+	confirm_btn.pressed.connect(_on_confirm_launch.bind(def_id))
+	footer.add_child(confirm_btn)
+
+	return outer
+
+func _get_launch_config(def_id: String) -> Dictionary:
+	if not _launch_selections.has(def_id):
+		_launch_selections[def_id] = {"power": "standard", "comms": "standard", "nav": "standard", "testing": "basic"}
+	return _launch_selections[def_id]
 
 # ── Operations log ────────────────────────────────────────────────────────────
 
@@ -695,8 +788,19 @@ func _on_time_btn(scale: float) -> void:
 		_time_label.text     = {1.0: ">  1×", 5.0: ">>  5×", 30.0: ">>>  30×"}.get(scale, ">  LIVE")
 		_time_label.modulate = C_GREEN
 
-func _on_launch(def_id: String) -> void:
-	MissionSystem.launch(def_id)
+func _on_launch_configure(def_id: String) -> void:
+	_launch_config_open[def_id] = not _launch_config_open.get(def_id, false)
+	_rebuild_available()
+
+func _on_config_select(def_id: String, cat: String, opt_id: String) -> void:
+	_get_launch_config(def_id)[cat] = opt_id
+	_rebuild_available()
+
+func _on_confirm_launch(def_id: String) -> void:
+	var config := _get_launch_config(def_id)
+	MissionSystem.launch(def_id, config)
+	_launch_config_open.erase(def_id)
+	_launch_selections.erase(def_id)
 	_rebuild_available()
 
 func _on_nav(tab_id: String) -> void:
@@ -1025,7 +1129,7 @@ func _post_initial_log() -> void:
 	_add_log_entry({"date": TimeManager.get_date_string(), "level": "info",
 		"text": "AGENCY INITIALIZED. " + GameState.agency_name.to_upper() + " MISSION CONTROL ONLINE."})
 	_add_log_entry({"date": TimeManager.get_date_string(), "level": "info",
-		"text": "BUDGET: " + _fmt_funds(GameState.funding) + "  |  SELECT A MISSION AND PRESS [LAUNCH]."})
+		"text": "BUDGET: " + _fmt_funds(GameState.funding) + "  |  SELECT A MISSION, CONFIGURE SYSTEMS, AND CONFIRM LAUNCH."})
 	_add_log_entry({"date": TimeManager.get_date_string(), "level": "info",
 		"text": "USE TIME CONTROLS TO ADVANCE THE CLOCK.  MISSIONS THAT FAIL APPEAR IN [INVESTIGATIONS]."})
 

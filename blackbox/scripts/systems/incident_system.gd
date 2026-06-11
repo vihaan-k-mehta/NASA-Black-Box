@@ -78,6 +78,7 @@ func _roll_mission(mission: Dictionary) -> void:
 
 		# Tech tree can reduce probabilities
 		prob *= TechTree.get_incident_modifier(inc_id)
+		prob *= mission.get("config_modifiers", {}).get(inc_id, 1.0)
 
 		if _rng.randf() > prob:
 			continue

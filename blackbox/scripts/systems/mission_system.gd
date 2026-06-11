@@ -65,6 +65,27 @@ const DEFS: Dictionary = {
 	},
 }
 
+# ── Mission configuration options ────────────────────────────────────────────
+
+const CONFIG_OPTIONS: Dictionary = {
+	"power": {
+		"standard": {"label": "Standard Solar Array", "extra_cost": 0.0,         "mods": {}},
+		"hardened": {"label": "Hardened Power Array",  "extra_cost": 2_000_000.0, "mods": {"solar_storm": 0.55}},
+	},
+	"comms": {
+		"standard":  {"label": "Standard Antenna",    "extra_cost": 0.0,         "mods": {}},
+		"redundant": {"label": "Redundant Comm Array", "extra_cost": 3_000_000.0, "mods": {"comms_noise": 0.4, "software_glitch": 0.85}},
+	},
+	"nav": {
+		"standard":  {"label": "Standard Computer",  "extra_cost": 0.0,         "mods": {}},
+		"redundant": {"label": "Redundant Computer", "extra_cost": 2_000_000.0, "mods": {"software_glitch": 0.5, "thruster_anomaly": 0.7}},
+	},
+	"testing": {
+		"basic":    {"label": "Basic Checkout",    "extra_cost": 0.0,         "mods": {}},
+		"extended": {"label": "Extended Protocol", "extra_cost": 1_500_000.0, "mods": {"solar_storm": 0.88, "software_glitch": 0.85, "comms_noise": 0.85, "micrometeorite": 0.88, "thruster_anomaly": 0.85}},
+	},
+}
+
 # ── State ─────────────────────────────────────────────────────────────────────
 
 var missions: Array = []
@@ -84,13 +105,29 @@ func has_active_of_type(def_id: String) -> bool:
 			return true
 	return false
 
-func launch(def_id: String) -> Dictionary:
+func config_extra_cost(config: Dictionary) -> float:
+	var total: float = 0.0
+	for cat: String in config:
+		var opt: Dictionary = CONFIG_OPTIONS.get(cat, {}).get(config[cat], {})
+		total += opt.get("extra_cost", 0.0)
+	return total
+
+func _build_config_modifiers(config: Dictionary) -> Dictionary:
+	var mods: Dictionary = {}
+	for cat: String in config:
+		var opt: Dictionary = CONFIG_OPTIONS.get(cat, {}).get(config[cat], {})
+		for inc_id: String in opt.get("mods", {}):
+			mods[inc_id] = mods.get(inc_id, 1.0) * opt["mods"][inc_id]
+	return mods
+
+func launch(def_id: String, config: Dictionary = {}) -> Dictionary:
 	if not DEFS.has(def_id):
 		return {}
 	if has_active_of_type(def_id):
 		return {}
-	var def: Dictionary = DEFS[def_id]
-	if not GameState.spend_funding(def["cost"]):
+	var def: Dictionary   = DEFS[def_id]
+	var total_cost: float = def["cost"] + config_extra_cost(config)
+	if not GameState.spend_funding(total_cost):
 		return {}
 
 	if not _name_counters.has(def_id):
@@ -99,15 +136,17 @@ func launch(def_id: String) -> Dictionary:
 	var mission_name: String = "%s-%02d" % [def["name_prefix"], _name_counters[def_id]]
 
 	var m: Dictionary = {
-		"id":           str(_next_id),
-		"def_id":       def_id,
-		"name":         mission_name,
-		"status":       "active",
-		"launch_date":  TimeManager.get_date(),
-		"elapsed_days": 0,
-		"total_days":   def["duration_days"],
-		"health":       100.0,
-		"incidents":    [],
+		"id":               str(_next_id),
+		"def_id":           def_id,
+		"name":             mission_name,
+		"status":           "active",
+		"launch_date":      TimeManager.get_date(),
+		"elapsed_days":     0,
+		"total_days":       def["duration_days"],
+		"health":           100.0,
+		"incidents":        [],
+		"config":           config.duplicate(),
+		"config_modifiers": _build_config_modifiers(config),
 		"systems": {
 			"power":          100.0,
 			"communications": 100.0,

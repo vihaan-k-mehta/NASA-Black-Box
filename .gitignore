@@ -1,0 +1,7 @@
+# Godot 4 build artifacts and cache
+.godot/
+*.translation
+
+# Mono (not used but safe to ignore)
+.mono/
+data_*/

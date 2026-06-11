@@ -1,0 +1,32 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Black Box"
+run/main_scene="res://scenes/main/mission_control.tscn"
+config/features=PackedStringArray("4.6")
+
+[autoload]
+
+EventBus="*res://scripts/core/event_bus.gd"
+GameState="*res://scripts/core/game_state.gd"
+TimeManager="*res://scripts/core/time_manager.gd"
+MissionSystem="*res://scripts/systems/mission_system.gd"
+IncidentSystem="*res://scripts/systems/incident_system.gd"
+InvestigationSystem="*res://scripts/systems/investigation_system.gd"
+TechTree="*res://scripts/systems/tech_tree.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"

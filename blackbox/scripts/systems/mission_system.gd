@@ -145,8 +145,10 @@ func launch(def_id: String, config: Dictionary = {}) -> Dictionary:
 		"total_days":       def["duration_days"],
 		"health":           100.0,
 		"incidents":        [],
-		"config":           config.duplicate(),
-		"config_modifiers": _build_config_modifiers(config),
+		"config":             config.duplicate(),
+		"config_modifiers":   _build_config_modifiers(config),
+		"decision_modifiers": {},
+		"resolved_decisions": [],
 		"systems": {
 			"power":          100.0,
 			"communications": 100.0,

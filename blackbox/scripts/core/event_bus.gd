@@ -22,5 +22,9 @@ signal reputation_changed(new_value: float)
 signal mission_unlocked(def_id: String)
 signal tech_unlocked(tech_id: String)
 
+# ── Decisions ─────────────────────────────────────────────────────────────────
+signal decision_required(mission_id: String, decision: Dictionary)
+signal decision_resolved(mission_id: String, decision_id: String)
+
 # ── UI / alerts ───────────────────────────────────────────────────────────────
 signal alert_added(alert: Dictionary)

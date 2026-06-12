@@ -57,6 +57,10 @@ var _objectives_vbox: VBoxContainer
 var _launch_config_open: Dictionary = {}   # def_id -> bool
 var _launch_selections:  Dictionary = {}   # def_id -> {power, comms, nav, testing}
 
+# Decision events
+var _decisions_container: VBoxContainer
+var _pending_decisions:   Dictionary = {}  # mission_id -> decision dict
+
 # Incident popup
 var _popup:          Control
 var _popup_label:    Label
@@ -177,6 +181,10 @@ func _build_missions_panel() -> Control:
 	panel.add_child(vbox)
 	vbox.add_child(_section_hdr("ACTIVE MISSIONS"))
 
+	_decisions_container = VBoxContainer.new()
+	_decisions_container.add_theme_constant_override("separation", 4)
+	vbox.add_child(_decisions_container)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -193,6 +201,54 @@ func _build_missions_panel() -> Control:
 	empty.custom_minimum_size = Vector2(0, 100)
 	_missions_vbox.add_child(empty)
 	return panel
+
+func _rebuild_decisions() -> void:
+	for c in _decisions_container.get_children():
+		c.queue_free()
+	for mission_id in _pending_decisions:
+		_decisions_container.add_child(_build_decision_card(mission_id, _pending_decisions[mission_id]))
+
+func _build_decision_card(mission_id: String, dec: Dictionary) -> Control:
+	var mission: Dictionary = MissionSystem.get_mission(mission_id)
+	var mission_name: String = mission.get("name", mission_id)
+
+	var outer := PanelContainer.new()
+	outer.add_theme_stylebox_override("panel", _pstyle(Color(0.12, 0.10, 0.06), C_AMBER, 1, 1, 3, 1))
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	outer.add_child(_pad(12, 10, 12, 10, vbox))
+
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 10)
+	vbox.add_child(hdr)
+	hdr.add_child(_lbl("▲ " + mission_name, 11, C_AMBER))
+	var req := _lbl("DECISION REQUIRED", 10, C_DIM)
+	req.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	req.horizontal_alignment  = HORIZONTAL_ALIGNMENT_RIGHT
+	hdr.add_child(req)
+
+	vbox.add_child(_lbl(dec.get("title", ""), 13, C_TEXT))
+	var sit := _lbl(dec.get("situation", ""), 11, C_DIM)
+	sit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(sit)
+
+	var opts_row := HBoxContainer.new()
+	opts_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(opts_row)
+
+	var options: Array = dec.get("options", [])
+	for i in options.size():
+		var opt: Dictionary = options[i]
+		var health_delta: float = opt.get("health_delta", 0.0)
+		var delta_str: String = ("  HEALTH %+.0f" % health_delta) if health_delta != 0.0 else ""
+		var btn := _btn(opt["label"] + delta_str, 11)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.add_theme_color_override("font_color", C_AMBER if i == 0 else C_TEXT)
+		btn.pressed.connect(_on_decision_choice.bind(mission_id, dec["id"], i))
+		opts_row.add_child(btn)
+
+	return outer
 
 func _build_right_column() -> Control:
 	var col := VBoxContainer.new()
@@ -752,6 +808,8 @@ func _connect_signals() -> void:
 	EventBus.alert_added.connect(_add_log_entry)
 	EventBus.investigation_started.connect(_on_investigation_started)
 	EventBus.investigation_completed.connect(func(_id, _r): _rebuild_investigations(); _update_inv_badge())
+	EventBus.decision_required.connect(_on_decision_required)
+	EventBus.decision_resolved.connect(_on_decision_resolved)
 
 func _on_mission_launched(mission: Dictionary) -> void:
 	_add_mission_card(mission)
@@ -777,6 +835,22 @@ func _on_incident(mission_id: String, incident: Dictionary) -> void:
 func _on_investigation_started(_mission_id: String) -> void:
 	_rebuild_investigations()
 	_update_inv_badge()
+
+func _on_decision_required(mission_id: String, decision: Dictionary) -> void:
+	_pending_decisions[mission_id] = decision
+	_rebuild_decisions()
+	_nav_to_mc()
+
+func _on_decision_resolved(mission_id: String, _decision_id: String) -> void:
+	_pending_decisions.erase(mission_id)
+	_rebuild_decisions()
+
+func _on_decision_choice(mission_id: String, decision_id: String, option_idx: int) -> void:
+	IncidentSystem.resolve_decision(mission_id, decision_id, option_idx)
+
+func _nav_to_mc() -> void:
+	if _current_view != "mc":
+		_on_nav("mc")
 
 func _on_time_btn(scale: float) -> void:
 	if scale == 0.0:

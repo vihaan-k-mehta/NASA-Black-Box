@@ -42,6 +42,30 @@ const TECHS: Dictionary = {
 		"incident_modifiers": {},
 		"global_modifier": 0.80,
 	},
+	"forensic_lab": {
+		"name":        "Forensic Laboratory",
+		"category":    "Investigation",
+		"cost":        5_000_000.0,
+		"description": "Advanced analysis tools decrypt corrupted EVENTS.LOG entries.",
+		"prerequisites": [],
+		"incident_modifiers": {},
+	},
+	"signal_decoder": {
+		"name":        "Signal Decoder Array",
+		"category":    "Investigation",
+		"cost":        4_000_000.0,
+		"description": "High-fidelity decryption restores corrupted COMMS.LOG transmissions.",
+		"prerequisites": [],
+		"incident_modifiers": {},
+	},
+	"telemetry_suite": {
+		"name":        "Advanced Telemetry Suite",
+		"category":    "Investigation",
+		"cost":        6_000_000.0,
+		"description": "Calibrated sensors restore corrupted TELEMETRY.DAT readings.",
+		"prerequisites": [],
+		"incident_modifiers": {},
+	},
 }
 
 var _unlocked: Array[String] = []

@@ -7,16 +7,19 @@ const HYPOTHESIS_CATEGORIES: Dictionary = {
 	"SOFTWARE_ANOMALY":       "Software or firmware fault caused cascading system failures",
 	"COMMUNICATION_FAILURE":  "Signal degradation or antenna fault led to loss of contact",
 	"ENGINEERING_DEFICIENCY": "Design, manufacturing, or component flaw caused premature failure",
+	"UNKNOWN_PHENOMENON":     "No conventional explanation fits the observed telemetry profile",
 }
 
 # Maps internal incident id → hypothesis category (internal, not shown directly)
 const INCIDENT_TO_HYPOTHESIS: Dictionary = {
-	"solar_storm":     "RADIATION_EVENT",
-	"micrometeorite":  "PHYSICAL_IMPACT",
-	"software_glitch": "SOFTWARE_ANOMALY",
-	"comms_noise":     "COMMUNICATION_FAILURE",
-	"thruster_anomaly": "ENGINEERING_DEFICIENCY",
-	"component_wear":  "ENGINEERING_DEFICIENCY",
+	"solar_storm":          "RADIATION_EVENT",
+	"micrometeorite":       "PHYSICAL_IMPACT",
+	"software_glitch":      "SOFTWARE_ANOMALY",
+	"comms_noise":          "COMMUNICATION_FAILURE",
+	"thruster_anomaly":     "ENGINEERING_DEFICIENCY",
+	"component_wear":       "ENGINEERING_DEFICIENCY",
+	"unknown_signal":       "UNKNOWN_PHENOMENON",
+	"trajectory_deviation": "UNKNOWN_PHENOMENON",
 }
 
 # Correct hypothesis → tech recommendations
@@ -26,6 +29,7 @@ const HYPOTHESIS_TO_TECH: Dictionary = {
 	"SOFTWARE_ANOMALY":       ["fault_tolerant_software"],
 	"COMMUNICATION_FAILURE":  ["redundant_comms"],
 	"ENGINEERING_DEFICIENCY": [],
+	"UNKNOWN_PHENOMENON":     ["forensic_lab", "signal_decoder", "telemetry_suite"],
 }
 
 # Crew voice log dialogue per incident — hints at what's happening, never names it
@@ -72,6 +76,20 @@ const CREW_DIALOGUE: Dictionary = {
 		{"from": "CDR",    "text": "It's like the vehicle is tired. Nothing critical. Just worn."},
 		{"from": "CAPCOM", "text": "Copy. Flag it for post-mission review. Continue nominal ops."},
 	],
+	"unknown_signal": [
+		{"from": "MS1",    "text": "Houston, we're receiving a signal. It's not on any of our frequencies."},
+		{"from": "CAPCOM", "text": "Say again. What frequency?"},
+		{"from": "MS1",    "text": "That's the thing. Our equipment shouldn't even be able to receive this. It doesn't match anything in the catalog."},
+		{"from": "CDR",    "text": "It's structured. I don't know how else to say it. This isn't noise."},
+		{"from": "CAPCOM", "text": "Stand by. We're looking into it."},
+	],
+	"trajectory_deviation": [
+		{"from": "CDR",    "text": "Houston, we have a trajectory deviation. No burns were commanded."},
+		{"from": "CAPCOM", "text": "We see it. Thruster logs show zero activity. What is your current status?"},
+		{"from": "CDR",    "text": "No commanded burns. No unplanned venting. Nothing. We just... moved."},
+		{"from": "PLT",    "text": "Navigation is trying to compensate but we're not getting normal response."},
+		{"from": "CDR",    "text": "Houston, something pushed us. I don't know what else to call it."},
+	],
 }
 
 # Symptom strings per incident — describe EFFECTS, not causes
@@ -111,12 +129,174 @@ const INCIDENT_SYMPTOMS: Dictionary = {
 		"Orbital parameters deviated from planned trajectory by 0.08°.",
 		"Thruster valve cycling detected outside of scheduled burn window.",
 	],
+	"unknown_signal": [
+		"Unidentified RF signal received on frequency outside the published catalog.",
+		"Signal showed modulated pattern inconsistent with any natural radio source.",
+		"Communications array logged autonomous directional lock on unidentified origin.",
+		"Navigation computer registered an unexplained heading suggestion during the signal window.",
+		"Received signal contains repeating structure at 13.7-second intervals.",
+	],
+	"trajectory_deviation": [
+		"Navigation log confirms 0.22° heading change with zero thruster activity.",
+		"IMU recorded 1.8 m/s delta-V with no corresponding thruster event in the log.",
+		"Fuel consumption during deviation window: zero. Cause of motion: unresolved.",
+		"External force calculation yields no match to solar pressure, drag, or outgassing.",
+		"Attitude control system logged resistance against commanded correction burn.",
+	],
 }
+
+# ── Pre-built mystery cases (arrive on desk without mission failure) ──────────
+
+const INBOUND_CASES: Array[Dictionary] = [
+	{
+		"id":           "case_luna_sur",
+		"trigger_day":  40,
+		"mission_name": "LUNA-SUR-07",
+		"mission_id":   "inbound_0",
+		"elapsed_days": 5,
+		"total_days":   180,
+		"root_cause":   "trajectory_deviation",
+		"summary":      "LUNAR SURFACE PROBE  |  LOSS OF CONTACT ON MISSION DAY 5",
+		"timeline": [
+			{"date": "JAN 14  2025", "type": "normal",   "text": "Probe landing confirmed. Surface operations initiated. All systems nominal."},
+			{"date": "JAN 17  2025", "type": "incident", "text": "Seismic sensors registered micro-tremors. Magnitude 0.3. No correlation to known moonquake patterns."},
+			{"date": "JAN 19  2025", "type": "incident", "text": "Soil sample analysis detected organic compound trace. Concentration 0.003%. Source: unidentified."},
+			{"date": "JAN 19  2025", "type": "incident", "text": "Navigation system logged unplanned 0.4m surface displacement. No command issued."},
+			{"date": "JAN 19  2025", "type": "critical", "text": "Telemetry link lost. Signal not recovered. Mission loss declared."},
+		],
+		"comms": [
+			{"from": "CAPCOM",          "text": "Landing confirmed. Surface ops are go."},
+			{"from": "MS1",             "text": "Houston, seismic sensors show micro-tremors. Not consistent with any known moonquake signature."},
+			{"from": "CAPCOM",          "text": "Copy. Could be settling. Monitor and report."},
+			{"from": "MS1",             "text": "We're seeing a trace organic compound in the sample data. That has to be a sensor error."},
+			{"from": "CAPCOM",          "text": "Organic? Say again?"},
+			{"from": "MS1",             "text": "The probe just moved. We didn't command that. It moved."},
+			{"from": "CAPCOM",          "text": "[AUTO] Signal lost. No carrier on primary or backup."},
+			{"from": "FLIGHT DIRECTOR", "text": "LUNA-SUR-07 is declared lost. Begin contingency procedures."},
+		],
+		"sensors": {
+			"power":          {"value": 91.0, "status": "NOMINAL"},
+			"communications": {"value":  8.0, "status": "FAILED"},
+			"navigation":     {"value": 22.0, "status": "CRITICAL"},
+			"structure":      {"value": 48.0, "status": "CRITICAL"},
+			"thermal":        {"value": 86.0, "status": "NOMINAL"},
+		},
+	},
+	{
+		"id":           "case_deep_relay",
+		"trigger_day":  100,
+		"mission_name": "DEEP-RLY-11",
+		"mission_id":   "inbound_1",
+		"elapsed_days": 312,
+		"total_days":   730,
+		"root_cause":   "unknown_signal",
+		"summary":      "DEEP SPACE RELAY  |  UNEXPLAINED SIGNAL EVENT ON MISSION DAY 312",
+		"timeline": [
+			{"date": "MAR 01  2025", "type": "normal",   "text": "Relay station fully operational. Signal routing nominal."},
+			{"date": "NOV 08  2025", "type": "incident", "text": "Unidentified RF signal received on frequency 1420.4 MHz. Duration 72 seconds."},
+			{"date": "NOV 08  2025", "type": "incident", "text": "Signal analysis shows repeating structure at 2, 3, 5, 7, 11, 13-second intervals. Prime sequence."},
+			{"date": "NOV 08  2025", "type": "incident", "text": "Communications array autonomously reoriented toward signal source. No command issued."},
+			{"date": "NOV 08  2025", "type": "critical", "text": "Telemetry link lost. Signal not recovered. Mission loss declared."},
+		],
+		"comms": [
+			{"from": "CAPCOM",          "text": "Deep relay ops nominal. Routing telemetry from outer network."},
+			{"from": "OPS",             "text": "Houston, unscheduled signal on 1420 megahertz. That's the hydrogen line."},
+			{"from": "CAPCOM",          "text": "Confirm. Is this interference?"},
+			{"from": "OPS",             "text": "Negative. Duration is 72 seconds. It's structured. The intervals match prime numbers."},
+			{"from": "CAPCOM",          "text": "Do not respond. Maintain passive reception. We're escalating."},
+			{"from": "OPS",             "text": "The antenna just realigned itself. We didn't command that."},
+			{"from": "CAPCOM",          "text": "[AUTO] Signal lost. No carrier on primary or backup."},
+			{"from": "FLIGHT DIRECTOR", "text": "DEEP-RLY-11 is declared lost. Begin contingency procedures."},
+		],
+		"sensors": {
+			"power":          {"value": 78.0, "status": "NOMINAL"},
+			"communications": {"value":  4.0, "status": "FAILED"},
+			"navigation":     {"value": 61.0, "status": "DEGRADED"},
+			"structure":      {"value": 82.0, "status": "NOMINAL"},
+			"thermal":        {"value": 89.0, "status": "NOMINAL"},
+		},
+	},
+	{
+		"id":           "case_survey_delta",
+		"trigger_day":  180,
+		"mission_name": "SURVEY-DELTA-4",
+		"mission_id":   "inbound_2",
+		"elapsed_days": 67,
+		"total_days":   365,
+		"root_cause":   "trajectory_deviation",
+		"summary":      "NEAR-EARTH SURVEY  |  UNREGISTERED RADAR CONTACT ON MISSION DAY 67",
+		"timeline": [
+			{"date": "FEB 22  2025", "type": "normal",   "text": "Survey satellite fully operational. Radar array initialized."},
+			{"date": "APR 30  2025", "type": "incident", "text": "Radar contact: unregistered object at 847km altitude. Mass estimate 240,000 metric tons. No registry match."},
+			{"date": "APR 30  2025", "type": "incident", "text": "Object orbital parameters: 97.4° inclination, eccentricity 0.000. Perfect circular retrograde orbit."},
+			{"date": "APR 30  2025", "type": "incident", "text": "Satellite course deviation of 2.1° recorded with zero thruster activity. Object passed within 3km."},
+			{"date": "APR 30  2025", "type": "critical", "text": "Telemetry link lost. Signal not recovered. Mission loss declared."},
+		],
+		"comms": [
+			{"from": "CAPCOM",          "text": "Survey array online. Radar coverage nominal."},
+			{"from": "CDR",             "text": "Houston, radar contact. Unregistered object. Reading 240,000 metric tons."},
+			{"from": "CAPCOM",          "text": "Say again. Confirm mass estimate."},
+			{"from": "CDR",             "text": "240,000 tons. Clean circular retrograde orbit. It's been up here a while."},
+			{"from": "CAPCOM",          "text": "We have no record of that object. What is it?"},
+			{"from": "CDR",             "text": "It passed 3 kilometers from us. Our satellite moved toward it. We didn't fire any thrusters."},
+			{"from": "CAPCOM",          "text": "[AUTO] Signal lost. No carrier on primary or backup."},
+			{"from": "FLIGHT DIRECTOR", "text": "SURVEY-DELTA-4 is declared lost. Begin contingency procedures."},
+		],
+		"sensors": {
+			"power":          {"value": 84.0, "status": "NOMINAL"},
+			"communications": {"value": 17.0, "status": "FAILED"},
+			"navigation":     {"value": 11.0, "status": "FAILED"},
+			"structure":      {"value": 56.0, "status": "DEGRADED"},
+			"thermal":        {"value": 79.0, "status": "NOMINAL"},
+		},
+	},
+]
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var investigations: Dictionary = {}  # mission_id -> investigation dict
+var _triggered_cases: Array[String] = []
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
+func _ready() -> void:
+	EventBus.time_advanced.connect(_check_inbound_cases)
+
+func _check_inbound_cases(_date: Dictionary) -> void:
+	for case: Dictionary in INBOUND_CASES:
+		if case["id"] in _triggered_cases:
+			continue
+		if GameState.days_elapsed >= case["trigger_day"]:
+			_triggered_cases.append(case["id"])
+			_open_inbound(case)
+
+func _open_inbound(case: Dictionary) -> void:
+	var inv_id: String = case["mission_id"]
+	if investigations.has(inv_id):
+		return
+	investigations[inv_id] = {
+		"mission_id":      inv_id,
+		"mission_name":    case["mission_name"],
+		"mission_def":     "",
+		"elapsed_days":    case["elapsed_days"],
+		"total_days":      case["total_days"],
+		"opened_date":     TimeManager.get_date_string(),
+		"resolved":        false,
+		"diagnosis_correct": false,
+		"timeline":        case["timeline"],
+		"comms":           case["comms"],
+		"sensors":         case["sensors"],
+		"root_cause":      case["root_cause"],
+		"total_incidents": case["timeline"].size(),
+		"source":          "inbound",
+		"summary":         case.get("summary", ""),
+	}
+	EventBus.emit_signal("alert_added", {
+		"date":  TimeManager.get_date_string(),
+		"level": "critical",
+		"text":  "CASE FILED: " + case["mission_name"] + "  |  CLASSIFIED INVESTIGATION ASSIGNED",
+	})
+	EventBus.emit_signal("investigation_started", inv_id)
+	EventBus.emit_signal("case_filed", case["id"])
 
 func open(mission: Dictionary) -> void:
 	var inv_id: String = mission["id"]
@@ -141,11 +321,12 @@ func submit_hypothesis(mission_id: String, hypothesis: String) -> Dictionary:
 		inv["confirmed_hypothesis"] = correct_hyp  # shown only on correct
 
 	if correct:
-		GameState.change_reputation(4.0)
+		var rep_gain: float = 6.0 if hypothesis == "UNKNOWN_PHENOMENON" else 4.0
+		GameState.change_reputation(rep_gain)
 		EventBus.emit_signal("alert_added", {
 			"date":  TimeManager.get_date_string(),
 			"level": "success",
-			"text":  "INVESTIGATION CLOSED: " + inv["mission_name"] + "  |  CORRECT DIAGNOSIS  |  REP +4",
+			"text":  "INVESTIGATION CLOSED: " + inv["mission_name"] + "  |  CORRECT DIAGNOSIS  |  REP +" + str(int(rep_gain)),
 		})
 	else:
 		GameState.change_reputation(-3.0)

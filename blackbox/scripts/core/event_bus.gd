@@ -26,5 +26,9 @@ signal tech_unlocked(tech_id: String)
 signal decision_required(mission_id: String, decision: Dictionary)
 signal decision_resolved(mission_id: String, decision_id: String)
 
+# ── Cases / game state ────────────────────────────────────────────────────────
+signal case_filed(case_id: String)
+signal game_over(reason: String)
+
 # ── UI / alerts ───────────────────────────────────────────────────────────────
 signal alert_added(alert: Dictionary)

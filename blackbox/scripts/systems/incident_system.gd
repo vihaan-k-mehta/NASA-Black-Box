@@ -53,6 +53,26 @@ const INCIDENTS: Dictionary = {
 		"fatal_threshold":  0.0,
 		"description":      "An unplanned thruster firing has altered the mission trajectory.",
 	},
+	"unknown_signal": {
+		"name":             "Unexplained Signal",
+		"category":         "anomalous",
+		"prob_per_day":     0.0012,
+		"damage_min":       8.0,
+		"damage_max":       18.0,
+		"systems_affected": ["communications", "navigation"],
+		"fatal_threshold":  0.0,
+		"description":      "An unidentified signal received on a frequency with no known Earth origin.",
+	},
+	"trajectory_deviation": {
+		"name":             "Unexplained Trajectory Deviation",
+		"category":         "anomalous",
+		"prob_per_day":     0.001,
+		"damage_min":       12.0,
+		"damage_max":       24.0,
+		"systems_affected": ["navigation", "structure"],
+		"fatal_threshold":  0.0,
+		"description":      "Spacecraft deviated from planned trajectory with no thruster activity recorded.",
+	},
 }
 
 # ── Decision catalogue ────────────────────────────────────────────────────────
@@ -122,6 +142,8 @@ func _on_time_advanced(_date: Dictionary) -> void:
 		_roll_mission(mission)
 
 func _roll_decisions(mission: Dictionary) -> void:
+	if mission.get("type", "") == "planning":
+		return
 	var resolved: Array = mission.get("resolved_decisions", [])
 	for dec: Dictionary in DECISIONS:
 		if dec["id"] in resolved:
@@ -134,6 +156,8 @@ func _roll_decisions(mission: Dictionary) -> void:
 		return  # one decision at a time
 
 func _roll_mission(mission: Dictionary) -> void:
+	if mission.get("type", "") == "planning":
+		return
 	var def: Dictionary = MissionSystem.DEFS.get(mission["def_id"], {})
 	var weights: Dictionary = def.get("incident_weights", {})
 

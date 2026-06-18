@@ -67,6 +67,13 @@ var _popup_label:    Label
 var _popup_timer:    float = 0.0
 const POPUP_DURATION := 4.5
 
+# Career title
+var _career_label:   Label
+
+# Game over
+var _game_over_overlay:  Control
+var _game_over_msg_label: Label
+
 # ── Boot ──────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
@@ -108,6 +115,7 @@ func _build_ui() -> void:
 	root.add_child(_build_bottom_nav())
 
 	_build_popup()
+	_build_game_over_overlay()
 
 # ── Top bar ───────────────────────────────────────────────────────────────────
 
@@ -120,7 +128,12 @@ func _build_top_bar() -> Control:
 	h.add_theme_constant_override("separation", 0)
 	bar.add_child(h)
 
-	h.add_child(_pad(14, 0, 14, 0, _lbl(GameState.agency_name.to_upper(), 18, C_HEADER)))
+	var agency_vbox := VBoxContainer.new()
+	agency_vbox.add_theme_constant_override("separation", 1)
+	agency_vbox.add_child(_lbl(GameState.agency_name.to_upper(), 11, C_DIM))
+	_career_label = _lbl(GameState.get_career_title(), 16, _rep_color())
+	agency_vbox.add_child(_career_label)
+	h.add_child(_pad(14, 6, 14, 6, agency_vbox))
 	h.add_child(_vsep())
 	_date_label = _lbl(TimeManager.get_date_string(), 22, C_TEXT)
 	h.add_child(_pad(22, 0, 22, 0, _date_label))
@@ -313,11 +326,14 @@ func _build_objectives_panel() -> Control:
 	vbox.add_theme_constant_override("separation", 0)
 	panel.add_child(vbox)
 	vbox.add_child(_section_hdr("PROGRAM OBJECTIVES"))
-	var inner := _pad(12, 6, 12, 8)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 180)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
 	_objectives_vbox = VBoxContainer.new()
-	_objectives_vbox.add_theme_constant_override("separation", 5)
-	inner.add_child(_objectives_vbox)
-	vbox.add_child(inner)
+	_objectives_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_objectives_vbox.add_theme_constant_override("separation", 3)
+	scroll.add_child(_pad(12, 6, 12, 8, _objectives_vbox))
 	_rebuild_objectives()
 	return panel
 
@@ -326,39 +342,71 @@ func _rebuild_objectives() -> void:
 		return
 	for c in _objectives_vbox.get_children():
 		c.queue_free()
-	var phases: Array = [
-		["satellite_comm",    "PHASE 1  Comm Satellite"],
-		["satellite_weather", "PHASE 2  Weather Satellite"],
-		["lunar_flyby",       "PHASE 3  Lunar Flyby"],
-		["lunar_lander",      "PHASE 4  Lunar Landing"],
+
+	var lunar_phases: Array = [
+		["satellite_comm",         "1  Comm Satellite"],
+		["satellite_weather",      "2  Weather Satellite"],
+		["lunar_trajectory_study", "3  Trajectory Analysis"],
+		["hardware_procurement",   "4  Hardware Procurement"],
+		["lunar_flyby",            "5  Lunar Flyby Probe"],
+		["lunar_orbit",            "6  Lunar Orbit Insertion"],
+		["lunar_lander",           "7  Lunar Landing"],
+		["lunar_sample_return",    "8  Sample Return"],
 	]
-	for phase: Array in phases:
-		var def_id: String = phase[0]
-		var label: String  = phase[1]
-		var completed: bool = GameState.completion_count(def_id) > 0
-		var is_active: bool = MissionSystem.has_active_of_type(def_id)
-		var unlocked: bool  = def_id in GameState.unlocked_missions
-		var icon: String
-		var col: Color
-		var status: String
-		if completed:
-			icon = "✓";  col = C_GREEN;  status = "COMPLETE"
-		elif is_active:
-			icon = "●";  col = C_AMBER;  status = "IN PROGRESS"
-		elif unlocked:
-			icon = "▸";  col = C_ACCENT; status = "READY"
-		else:
-			icon = "○";  col = C_DIM;    status = "LOCKED"
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		_objectives_vbox.add_child(row)
-		row.add_child(_lbl(icon, 11, col))
-		var lbl := _lbl(label, 11, col)
-		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(lbl)
-		row.add_child(_lbl(status, 10, col))
-	_objectives_vbox.add_child(_lbl("", 3, C_DIM))
-	_objectives_vbox.add_child(_lbl("CAMPAIGN: Land on the Moon before agency dissolution.", 10, C_DIM))
+	var mars_phases: Array = [
+		["mars_window_calc",     "1  Transfer Window Study"],
+		["mars_reconnaissance",  "2  Reconnaissance Probe"],
+		["mars_orbit",           "3  Orbital Survey"],
+		["mars_lander",          "4  Surface Lander"],
+	]
+
+	_objectives_vbox.add_child(_prog_header("LUNAR PROGRAM"))
+	for phase: Array in lunar_phases:
+		_objectives_vbox.add_child(_phase_row(phase[0], phase[1]))
+
+	_objectives_vbox.add_child(_lbl("", 5, C_DIM))
+
+	var mars_unlocked: bool = ("mars_window_calc" in GameState.unlocked_missions
+		or GameState.completion_count("mars_window_calc") > 0)
+	_objectives_vbox.add_child(_prog_header("MARS PROGRAM" + ("" if mars_unlocked else "  [LOCKED]")))
+
+	if mars_unlocked:
+		for phase: Array in mars_phases:
+			_objectives_vbox.add_child(_phase_row(phase[0], phase[1]))
+	else:
+		_objectives_vbox.add_child(_pad(6, 0, 0, 0, _lbl("Complete the Lunar Program to unlock.", 10, C_DIM)))
+
+	_objectives_vbox.add_child(_lbl("", 4, C_DIM))
+	var campaign: String = "CAMPAIGN: Land on Mars." if mars_unlocked else "CAMPAIGN: Complete the Lunar Program."
+	_objectives_vbox.add_child(_lbl(campaign, 10, C_DIM))
+
+func _prog_header(text: String) -> Control:
+	return _lbl(text, 10, C_ACCENT)
+
+func _phase_row(def_id: String, label: String) -> Control:
+	var completed: bool = GameState.completion_count(def_id) > 0
+	var is_active: bool = MissionSystem.has_active_of_type(def_id)
+	var unlocked: bool  = def_id in GameState.unlocked_missions
+	var is_plan: bool   = MissionSystem.DEFS.get(def_id, {}).get("type","") == "planning"
+	var icon: String; var col: Color; var status: String
+	if completed:
+		icon = "✓"; col = C_GREEN;  status = "DONE"
+	elif is_active:
+		icon = "●"; col = C_AMBER;  status = "PLAN" if is_plan else "ACTIVE"
+	elif unlocked:
+		icon = "▸"; col = C_ACCENT; status = "READY"
+	else:
+		icon = "○"; col = C_DIM;    status = ""
+	var type_tag: String = "  [PLAN]" if is_plan and not completed else ""
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(_lbl(icon, 10, col))
+	var lbl := _lbl(label + type_tag, 10, col)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(lbl)
+	if not status.is_empty():
+		row.add_child(_lbl(status, 9, col))
+	return _pad(0, 1, 0, 1, row)
 
 # ── Investigations view ───────────────────────────────────────────────────────
 
@@ -418,14 +466,20 @@ func _build_investigation_card(inv: Dictionary) -> Control:
 	var hdr_row := HBoxContainer.new()
 	hdr_row.add_theme_constant_override("separation", 12)
 	outer.add_child(hdr_row)
-	var title := _lbl("▸ CASE FILE:  " + inv["mission_name"], 16, C_RED)
+	var is_inbound: bool = inv.get("source", "") == "inbound"
+	var title_prefix: String = "▸ [CLASSIFIED]  " if is_inbound else "▸ CASE FILE:  "
+	var title_col: Color = C_AMBER if is_inbound else C_RED
+	var title := _lbl(title_prefix + inv["mission_name"], 16, title_col)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hdr_row.add_child(title)
 	if resolved:
 		hdr_row.add_child(_lbl("✓ RESOLVED" if correct else "✗ INCONCLUSIVE", 12, C_GREEN if correct else C_RED))
 	else:
 		hdr_row.add_child(_lbl("%d/3 FILES REVIEWED" % viewed.size(), 12, C_ACCENT if viewed.size() == 3 else C_DIM))
-	outer.add_child(_lbl("/blackbox/%s/  —  MISSION FAILED ON DAY %d OF %d" % [mission_id, inv.get("elapsed_days",0), inv.get("total_days",0)], 11, C_DIM))
+	if is_inbound:
+		outer.add_child(_lbl(inv.get("summary", "CLASSIFIED INVESTIGATION"), 11, C_DIM))
+	else:
+		outer.add_child(_lbl("/blackbox/%s/  —  MISSION FAILED ON DAY %d OF %d" % [mission_id, inv.get("elapsed_days",0), inv.get("total_days",0)], 11, C_DIM))
 	outer.add_child(_divider_h())
 
 	if not resolved:
@@ -707,10 +761,11 @@ func _build_launch_config(def_id: String, def: Dictionary) -> Control:
 	outer.add_child(_pad(12, 10, 12, 10, vbox))
 
 	var cats: Array = [
-		["power",   "POWER SYSTEM"],
-		["comms",   "COMMUNICATIONS"],
-		["nav",     "NAVIGATION"],
-		["testing", "TESTING PROTOCOL"],
+		["trajectory", "TRAJECTORY"],
+		["power",      "POWER SYSTEM"],
+		["comms",      "COMMUNICATIONS"],
+		["nav",        "NAVIGATION"],
+		["testing",    "TESTING PROTOCOL"],
 	]
 
 	for cat_pair: Array in cats:
@@ -748,7 +803,11 @@ func _build_launch_config(def_id: String, def: Dictionary) -> Control:
 	footer.add_theme_constant_override("separation", 8)
 	vbox.add_child(footer)
 
-	var total_lbl := _lbl("TOTAL  " + _fmt_funds(total_cost), 11, C_GREEN if affordable else C_RED)
+	var traj_id: String      = config.get("trajectory", "standard")
+	var traj_mult: float     = MissionSystem.CONFIG_OPTIONS.get("trajectory", {}).get(traj_id, {}).get("duration_mult", 1.0)
+	var new_duration: int    = int(def["duration_days"] * traj_mult)
+	var dur_str: String      = "" if traj_mult == 1.0 else ("  ·  %d DAYS" % new_duration)
+	var total_lbl := _lbl("TOTAL  " + _fmt_funds(total_cost) + dur_str, 11, C_GREEN if affordable else C_RED)
 	total_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(total_lbl)
 
@@ -767,7 +826,7 @@ func _build_launch_config(def_id: String, def: Dictionary) -> Control:
 
 func _get_launch_config(def_id: String) -> Dictionary:
 	if not _launch_selections.has(def_id):
-		_launch_selections[def_id] = {"power": "standard", "comms": "standard", "nav": "standard", "testing": "basic"}
+		_launch_selections[def_id] = {"trajectory": "standard", "power": "standard", "comms": "standard", "nav": "standard", "testing": "basic"}
 	return _launch_selections[def_id]
 
 # ── Operations log ────────────────────────────────────────────────────────────
@@ -803,11 +862,19 @@ func _connect_signals() -> void:
 	EventBus.mission_failed.connect(func(m): _update_mission_card(m); _rebuild_objectives())
 	EventBus.incident_occurred.connect(_on_incident)
 	EventBus.funding_changed.connect(func(v): _funds_label.text = _fmt_funds(v))
-	EventBus.reputation_changed.connect(func(_v): _rep_label.text = _rep_string(); _rep_label.modulate = _rep_color())
+	EventBus.reputation_changed.connect(func(_v):
+		_rep_label.text = _rep_string()
+		_rep_label.modulate = _rep_color()
+		_career_label.text = GameState.get_career_title()
+		_career_label.modulate = _rep_color()
+	)
+	EventBus.case_filed.connect(_on_case_filed)
+	EventBus.game_over.connect(_on_game_over)
 	EventBus.mission_unlocked.connect(func(_id): _rebuild_available())
 	EventBus.alert_added.connect(_add_log_entry)
 	EventBus.investigation_started.connect(_on_investigation_started)
 	EventBus.investigation_completed.connect(func(_id, _r): _rebuild_investigations(); _update_inv_badge())
+	EventBus.tech_unlocked.connect(func(_id): _rebuild_investigations())
 	EventBus.decision_required.connect(_on_decision_required)
 	EventBus.decision_resolved.connect(_on_decision_resolved)
 
@@ -847,6 +914,57 @@ func _on_decision_resolved(mission_id: String, _decision_id: String) -> void:
 
 func _on_decision_choice(mission_id: String, decision_id: String, option_idx: int) -> void:
 	IncidentSystem.resolve_decision(mission_id, decision_id, option_idx)
+
+func _on_case_filed(_case_id: String) -> void:
+	_on_nav("inv")
+
+func _on_game_over(reason: String) -> void:
+	TimeManager.pause()
+	_game_over_msg_label.text = reason
+	_game_over_overlay.visible = true
+
+func _build_game_over_overlay() -> void:
+	_game_over_overlay = Control.new()
+	_game_over_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_game_over_overlay.z_index = 100
+	_game_over_overlay.visible = false
+
+	var bg := ColorRect.new()
+	bg.color = Color(0.0, 0.0, 0.02, 0.94)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_game_over_overlay.add_child(bg)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_game_over_overlay.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 22)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	center.add_child(vbox)
+
+	var header := _lbl("TERMINATED", 52, C_RED)
+	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(header)
+
+	_game_over_msg_label = _lbl("", 14, C_AMBER)
+	_game_over_msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_game_over_msg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_game_over_msg_label.custom_minimum_size = Vector2(520, 0)
+	vbox.add_child(_game_over_msg_label)
+
+	vbox.add_child(_lbl("", 8, C_DIM))
+
+	var restart_btn := _btn("BEGIN NEW INVESTIGATION", 14)
+	restart_btn.custom_minimum_size = Vector2(280, 44)
+	restart_btn.add_theme_color_override("font_color", C_RED)
+	restart_btn.pressed.connect(func(): get_tree().reload_current_scene())
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_child(restart_btn)
+	vbox.add_child(btn_row)
+
+	add_child(_game_over_overlay)
 
 func _nav_to_mc() -> void:
 	if _current_view != "mc":
@@ -987,43 +1105,92 @@ func _build_file_content(inv: Dictionary, fname: String) -> Control:
 
 	match fname:
 		"EVENTS.LOG":
-			for entry: Dictionary in inv.get("timeline", []):
+			var has_lab: bool = TechTree.is_unlocked("forensic_lab")
+			if not has_lab:
+				vbox.add_child(_build_corrupt_banner("forensic_lab", "2 ENTRIES REDACTED", vbox))
+			var timeline: Array = inv.get("timeline", [])
+			for i: int in timeline.size():
+				var entry: Dictionary = timeline[i]
+				var corrupt: bool = not has_lab and entry.get("type","") == "incident" and i > 0 and i < timeline.size() - 1 and i % 2 == 1
 				var row := HBoxContainer.new()
 				row.add_theme_constant_override("separation", 10)
 				vbox.add_child(_pad(12, 0, 12, 0, row))
 				var dl := _lbl(entry.get("date",""), 10, C_DIM)
 				dl.custom_minimum_size = Vector2(110, 0)
 				row.add_child(dl)
-				var t: String  = entry.get("type","normal")
-				var ec: Color = C_RED if t == "critical" else (C_AMBER if t == "incident" else C_DIM)
-				row.add_child(_lbl(entry.get("text",""), 11, ec))
+				if corrupt:
+					row.add_child(_lbl("[DATA REDACTED — FORENSIC LAB REQUIRED]", 11, Color(0.28, 0.28, 0.30)))
+				else:
+					var t: String = entry.get("type","normal")
+					var ec: Color = C_RED if t == "critical" else (C_AMBER if t == "incident" else C_DIM)
+					row.add_child(_lbl(entry.get("text",""), 11, ec))
 		"TELEMETRY.DAT":
-			for sys_name: String in inv.get("sensors", {}):
-				var sd: Dictionary = inv["sensors"][sys_name]
+			var has_suite: bool = TechTree.is_unlocked("telemetry_suite")
+			if not has_suite:
+				vbox.add_child(_build_corrupt_banner("telemetry_suite", "2 SENSORS UNCALIBRATED", vbox))
+			var sensors: Dictionary = inv.get("sensors", {})
+			var sorted_sys: Array = sensors.keys()
+			sorted_sys.sort_custom(func(a, b): return sensors[a]["value"] < sensors[b]["value"])
+			var corrupt_sys: Array = sorted_sys.slice(0, 2) if not has_suite else []
+			for sys_name: String in sensors:
+				var sd: Dictionary = sensors[sys_name]
 				var val: float     = sd.get("value", 100.0)
 				var status: String = sd.get("status","NOMINAL")
-				var scol: Color    = C_GREEN if status == "NOMINAL" else (C_AMBER if status == "DEGRADED" else C_RED)
+				var corrupt: bool  = sys_name in corrupt_sys
 				var srow := HBoxContainer.new()
 				srow.add_theme_constant_override("separation", 8)
 				vbox.add_child(_pad(12, 0, 12, 0, srow))
 				var nm := _lbl(sys_name.to_upper(), 11, C_DIM)
 				nm.custom_minimum_size = Vector2(120, 0)
 				srow.add_child(nm)
-				var bar := _progress_bar(scol, val)
-				bar.custom_minimum_size = Vector2(140, 10)
-				srow.add_child(bar)
-				srow.add_child(_lbl("%d%%  %s" % [int(val), status], 10, scol))
+				if corrupt:
+					var bar := _progress_bar(Color(0.22, 0.22, 0.24), 0.0)
+					bar.custom_minimum_size = Vector2(140, 10)
+					srow.add_child(bar)
+					srow.add_child(_lbl("???  CALIBRATION ERROR", 10, Color(0.28, 0.28, 0.30)))
+				else:
+					var scol: Color = C_GREEN if status == "NOMINAL" else (C_AMBER if status == "DEGRADED" else C_RED)
+					var bar := _progress_bar(scol, val)
+					bar.custom_minimum_size = Vector2(140, 10)
+					srow.add_child(bar)
+					srow.add_child(_lbl("%d%%  %s" % [int(val), status], 10, scol))
 		"COMMS.LOG":
-			for comm: Dictionary in inv.get("comms", []):
+			var has_decoder: bool = TechTree.is_unlocked("signal_decoder")
+			if not has_decoder:
+				vbox.add_child(_build_corrupt_banner("signal_decoder", "2 TRANSMISSIONS CORRUPTED", vbox))
+			var comms: Array = inv.get("comms", [])
+			for i: int in comms.size():
+				var comm: Dictionary = comms[i]
+				var corrupt: bool = not has_decoder and i > 0 and i < comms.size() - 2 and i % 3 == 2
 				var crow := HBoxContainer.new()
 				crow.add_theme_constant_override("separation", 8)
 				vbox.add_child(_pad(12, 0, 12, 0, crow))
 				var fl := _lbl("[" + comm.get("from","") + "]", 10, C_ACCENT)
 				fl.custom_minimum_size = Vector2(152, 0)
 				crow.add_child(fl)
-				crow.add_child(_lbl(comm.get("text",""), 11, C_DIM))
+				if corrupt:
+					crow.add_child(_lbl("[TRANSMISSION CORRUPTED — SIGNAL DECODER REQUIRED]", 11, Color(0.28, 0.28, 0.30)))
+				else:
+					crow.add_child(_lbl(comm.get("text",""), 11, C_DIM))
 
 	return vbox
+
+func _build_corrupt_banner(tech_id: String, label: String, _parent: VBoxContainer) -> Control:
+	var tech: Dictionary  = TechTree.TECHS.get(tech_id, {})
+	var affordable: bool  = GameState.funding >= tech.get("cost", 0.0) and TechTree.can_research(tech_id)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var warn := _lbl("[!] " + label + "  —  " + tech.get("name","").to_upper() + " REQUIRED", 10, C_AMBER)
+	warn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(warn)
+	if not TechTree.is_unlocked(tech_id):
+		var rb := _btn("RESEARCH  " + _fmt_funds(tech.get("cost", 0.0)), 10)
+		rb.disabled = not affordable
+		if affordable:
+			rb.add_theme_color_override("font_color", C_GREEN)
+		rb.pressed.connect(_on_research.bind(tech_id))
+		row.add_child(rb)
+	return _pad(12, 6, 12, 6, row)
 
 func _on_file_click(event: InputEvent, mission_id: String, file_name: String) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
@@ -1061,6 +1228,7 @@ func _build_hypothesis_section(inv: Dictionary) -> Control:
 	row2.add_child(_build_hyp_card(mission_id, "SOFTWARE_ANOMALY",      hyps["SOFTWARE_ANOMALY"]))
 	row2.add_child(_build_hyp_card(mission_id, "COMMUNICATION_FAILURE", hyps["COMMUNICATION_FAILURE"]))
 	outer.add_child(_build_hyp_card(mission_id, "ENGINEERING_DEFICIENCY", hyps["ENGINEERING_DEFICIENCY"]))
+	outer.add_child(_build_hyp_card(mission_id, "UNKNOWN_PHENOMENON",   hyps["UNKNOWN_PHENOMENON"], true))
 
 	var sub_row := HBoxContainer.new()
 	sub_row.alignment = BoxContainer.ALIGNMENT_END
@@ -1075,21 +1243,22 @@ func _build_hypothesis_section(inv: Dictionary) -> Control:
 
 	return outer
 
-func _build_hyp_card(mission_id: String, hyp_id: String, desc: String) -> Control:
+func _build_hyp_card(mission_id: String, hyp_id: String, desc: String, classified: bool = false) -> Control:
 	var selected: bool = _inv_selected_hypotheses.get(mission_id, "") == hyp_id
 	var c := PanelContainer.new()
 	c.size_flags_horizontal      = Control.SIZE_EXPAND_FILL
 	c.custom_minimum_size        = Vector2(0, 52)
 	c.mouse_filter               = Control.MOUSE_FILTER_STOP
 	c.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_apply_hyp_style(c, selected)
+	_apply_hyp_style(c, selected, classified)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 2)
 	vbox.mouse_filter = Control.MOUSE_FILTER_PASS
 	c.add_child(vbox)
 
-	var title_lbl := _lbl(hyp_id.replace("_", " "), 12, C_TEXT if selected else C_DIM)
+	var base_col: Color = (C_AMBER if classified else C_TEXT) if selected else C_DIM
+	var title_lbl := _lbl(hyp_id.replace("_", " "), 12, base_col)
 	title_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	vbox.add_child(title_lbl)
 	var desc_lbl := _lbl(desc, 10, C_DIM)
@@ -1097,12 +1266,14 @@ func _build_hyp_card(mission_id: String, hyp_id: String, desc: String) -> Contro
 	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(desc_lbl)
 
-	_hyp_btn_groups[mission_id][hyp_id] = {"card": c, "title": title_lbl}
+	_hyp_btn_groups[mission_id][hyp_id] = {"card": c, "title": title_lbl, "classified": classified}
 	c.gui_input.connect(_on_hyp_click.bind(mission_id, hyp_id))
 	return c
 
-func _apply_hyp_style(card: Control, selected: bool) -> void:
-	if selected:
+func _apply_hyp_style(card: Control, selected: bool, classified: bool = false) -> void:
+	if selected and classified:
+		card.add_theme_stylebox_override("panel", _pstyle(Color(0.14, 0.10, 0.04), C_AMBER))
+	elif selected:
 		card.add_theme_stylebox_override("panel", _pstyle(Color(0.08, 0.16, 0.10), C_ACCENT))
 	else:
 		card.add_theme_stylebox_override("panel", _pstyle(C_PANEL, C_BORDER2))
@@ -1120,10 +1291,14 @@ func _build_result_section(inv: Dictionary) -> Control:
 	panel.add_child(vbox)
 
 	if correct:
+		var is_unknown: bool = inv.get("confirmed_hypothesis","") == "UNKNOWN_PHENOMENON"
 		vbox.add_child(_lbl("✓  CORRECT DIAGNOSIS", 16, C_GREEN))
 		var conf: String = inv.get("confirmed_hypothesis","").replace("_"," ")
 		vbox.add_child(_lbl("Root cause confirmed:  " + conf, 12, C_TEXT))
-		vbox.add_child(_lbl("Agency reputation increased.  REP +4", 11, C_DIM))
+		if is_unknown:
+			vbox.add_child(_lbl("Your findings match classified reports from other agencies.  REP +6", 11, C_AMBER))
+		else:
+			vbox.add_child(_lbl("Agency reputation increased.  REP +4", 11, C_DIM))
 		var techs: Array = InvestigationSystem.HYPOTHESIS_TO_TECH.get(inv.get("confirmed_hypothesis",""), [])
 		if not techs.is_empty():
 			vbox.add_child(_lbl("", 4, C_DIM))
@@ -1167,9 +1342,10 @@ func _on_hyp_click(event: InputEvent, mission_id: String, hyp_id: String) -> voi
 	if _hyp_btn_groups.has(mission_id):
 		for hid: String in _hyp_btn_groups[mission_id]:
 			var refs: Dictionary = _hyp_btn_groups[mission_id][hid]
-			var sel := (hid == hyp_id)
-			_apply_hyp_style(refs["card"], sel)
-			(refs["title"] as Label).modulate = C_TEXT if sel else C_DIM
+			var sel: bool = (hid == hyp_id)
+			var cl: bool  = refs.get("classified", false)
+			_apply_hyp_style(refs["card"], sel, cl)
+			(refs["title"] as Label).modulate = (C_AMBER if cl else C_TEXT) if sel else C_DIM
 	if _submit_btns.has(mission_id):
 		var sb: Button = _submit_btns[mission_id]
 		sb.disabled = false
@@ -1205,7 +1381,7 @@ func _post_initial_log() -> void:
 	_add_log_entry({"date": TimeManager.get_date_string(), "level": "info",
 		"text": "BUDGET: " + _fmt_funds(GameState.funding) + "  |  SELECT A MISSION, CONFIGURE SYSTEMS, AND CONFIRM LAUNCH."})
 	_add_log_entry({"date": TimeManager.get_date_string(), "level": "info",
-		"text": "USE TIME CONTROLS TO ADVANCE THE CLOCK.  MISSIONS THAT FAIL APPEAR IN [INVESTIGATIONS]."})
+		"text": "OBJECTIVE: COMPLETE THE LUNAR PROGRAM. THEN REACH MARS.  FAILED MISSIONS APPEAR IN [INVESTIGATIONS]."})
 
 # ── Widget helpers ────────────────────────────────────────────────────────────
 

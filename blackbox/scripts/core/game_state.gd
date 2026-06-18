@@ -3,6 +3,7 @@ extends Node
 var agency_name: String = "Apex Space"
 var funding:     float  = 50_000_000.0
 var reputation:  float  = 50.0          # 0–100
+var days_elapsed: int   = 0
 
 # Missions available to launch (def_ids)
 var unlocked_missions: Array[String] = ["satellite_comm"]
@@ -12,6 +13,18 @@ var mission_completions: Dictionary = {}   # def_id -> int
 
 # Investigations completed
 var investigations_resolved: Array[String] = []
+
+var _fired: bool = false
+
+func _ready() -> void:
+	EventBus.time_advanced.connect(func(_d): days_elapsed += 1)
+
+func get_career_title() -> String:
+	if reputation >= 80: return "CHIEF INVESTIGATOR"
+	if reputation >= 60: return "SENIOR INVESTIGATOR"
+	if reputation >= 35: return "INVESTIGATOR"
+	if reputation >= 15: return "JUNIOR INVESTIGATOR"
+	return "PROBATIONARY"
 
 func add_funding(amount: float) -> void:
 	funding += amount
@@ -25,8 +38,12 @@ func spend_funding(amount: float) -> bool:
 	return true
 
 func change_reputation(delta: float) -> void:
+	var old: float = reputation
 	reputation = clamp(reputation + delta, 0.0, 100.0)
 	EventBus.emit_signal("reputation_changed", reputation)
+	if reputation <= 8.0 and old > 8.0 and not _fired:
+		_fired = true
+		EventBus.emit_signal("game_over", "YOUR PERFORMANCE RECORD HAS BEEN REVIEWED.\n\nTOO MANY UNRESOLVED CASES. TOO MANY UNANSWERED QUESTIONS.\n\nYOUR CONTRACT HAS NOT BEEN RENEWED.")
 
 func record_completion(def_id: String) -> void:
 	mission_completions[def_id] = mission_completions.get(def_id, 0) + 1
